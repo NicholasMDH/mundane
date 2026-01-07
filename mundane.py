@@ -24,7 +24,6 @@ from mundane_pkg import (
     run_command_with_progress,
     # parsing
     normalize_combos,
-    extract_plugin_id_from_filename,
     group_findings_by_workflow,
     # constants
     get_results_root,

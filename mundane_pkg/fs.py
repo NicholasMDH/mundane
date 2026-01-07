@@ -256,10 +256,13 @@ def handle_finding_view(
     """
     Interactive file viewing menu (raw/grouped/hosts-only/copy/CVE info/workflow/tool/mark).
 
+    NOTE: This function uses Plugin and Finding database objects directly for all operations.
+    No filename parsing is performed - plugin_id comes from Plugin.plugin_id field.
+
     Args:
-        chosen: Plugin file to view
+        chosen: Synthetic plugin file path (used only for display, not parsing)
         finding: Finding database object (None if database not available)
-        plugin: Plugin metadata object (None if database not available)
+        plugin: Plugin metadata object (None if database not available) - used for CVE lookup, workflow check
         plugin_url: Optional Tenable plugin URL for CVE extraction
         workflow_mapper: Optional workflow mapper for plugin workflows
         scan_dir: Scan directory for tool workflow
@@ -275,7 +278,6 @@ def handle_finding_view(
         None: Continue normally
     """
     # Lazy imports to avoid circular dependencies
-    from .parsing import extract_plugin_id_from_filename
     from .render import (
         _file_raw_paged_text, _file_raw_payload_text,
         _grouped_paged_text, _grouped_payload_text,
@@ -287,13 +289,11 @@ def handle_finding_view(
 
     # Alias for consistency with original code
     _console = _console_global
-    _plugin_id_from_filename = extract_plugin_id_from_filename
 
     # Check if workflow is available
     has_workflow = False
-    if workflow_mapper:
-        plugin_id = _plugin_id_from_filename(chosen)
-        has_workflow = plugin_id and workflow_mapper.has_workflow(plugin_id)
+    if workflow_mapper and plugin:
+        has_workflow = workflow_mapper.has_workflow(str(plugin.plugin_id))
 
     # Loop to allow multiple actions on the same file
     while True:
@@ -350,9 +350,12 @@ def handle_finding_view(
             if scan_dir is None or sev_dir is None or hosts is None or args is None:
                 warn("Tool execution not available in this context.")
                 continue
+            if not plugin or not finding:
+                warn("Plugin/Finding information not available for tool execution.")
+                continue
 
-            # Run tool workflow
-            run_tool_workflow(chosen, scan_dir, sev_dir, hosts, ports_str or "", args, use_sudo)
+            # Run tool workflow with database objects
+            run_tool_workflow(plugin, finding, scan_dir, sev_dir, hosts, ports_str or "", args, use_sudo)
             # After tool completes, loop back to show menu again
             continue
 
@@ -362,11 +365,14 @@ def handle_finding_view(
 
         # Handle workflow option
         if action_choice in ("w", "workflow"):
+            if not plugin:
+                warn("Plugin information not available.")
+                continue
             if not has_workflow:
                 warn("No workflow available for this finding.")
                 continue
 
-            plugin_id = _plugin_id_from_filename(chosen)
+            plugin_id = str(plugin.plugin_id)
             workflow = workflow_mapper.get_workflow(plugin_id)
             if workflow:
                 display_workflow(workflow)
@@ -374,28 +380,18 @@ def handle_finding_view(
 
         # Handle CVE info option (read-only from database)
         if action_choice in ("e", "cve"):
-            # Get plugin ID from filename
-            plugin_id = _plugin_id_from_filename(chosen)
-            if not plugin_id:
-                warn("Cannot extract plugin ID from filename.")
-                continue
-
-            from mundane_pkg.models import Plugin
-            from mundane_pkg.database import get_connection
-
-            # Query CVEs from database (no web scraping)
+            # Use Plugin object already available as parameter
             try:
                 header("CVE Information")
 
-                with get_connection() as conn:
-                    plugin_obj = Plugin.get_by_id(int(plugin_id), conn=conn)
-
-                if plugin_obj and plugin_obj.cves:
-                    info(f"Found {len(plugin_obj.cves)} CVE(s):")
-                    for cve in plugin_obj.cves:
+                if plugin and plugin.cves:
+                    info(f"Found {len(plugin.cves)} CVE(s) for plugin {plugin.plugin_id}:")
+                    for cve in plugin.cves:
                         info(f"{cve}")
+                elif plugin:
+                    warn(f"No CVEs associated with this finding (plugin {plugin.plugin_id}).")
                 else:
-                    warn("No CVEs associated with this finding.")
+                    warn("Plugin information not available.")
             except Exception as exc:
                 warn(f"Failed to retrieve CVE information: {exc}")
 
@@ -534,7 +530,6 @@ def process_single_finding(
         workflow_mapper: Optional workflow mapper for plugin workflows
     """
     # Lazy imports to avoid circular dependencies
-    from .parsing import extract_plugin_id_from_filename
     from .render import _display_finding_preview
 
     # Get hosts and ports from database
