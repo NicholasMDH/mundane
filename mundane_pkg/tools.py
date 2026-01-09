@@ -830,6 +830,9 @@ def run_tool_workflow(
     plugin_url = f"{PLUGIN_DETAILS_BASE}{plugin.plugin_id}"
     plugin_id = str(plugin.plugin_id)
 
+    # Create synthetic path for ToolContext and logging (matches original chosen parameter)
+    synthetic_path = Path(f"{synthetic_filename}.txt")
+
     while True:
         from .config import load_config
         config = load_config()
@@ -953,7 +956,7 @@ def run_tool_workflow(
             scan_dir=scan_dir,
             sev_dir=sev_dir,
             plugin_url=plugin_url,
-            chosen_file=chosen,
+            chosen_file=synthetic_path,
         )
 
         # Call workflow with unified context (same signature for all tools!)
@@ -1016,7 +1019,7 @@ def run_tool_workflow(
                     tool_protocol=getattr(selected_tool, 'protocol', None),
                     host_count=host_count,
                     ports=ports_str if ports_str else None,
-                    file_path=chosen,
+                    file_path=synthetic_path,
                     scan_dir=scan_dir
                 )
 
