@@ -21,7 +21,7 @@ This includes:
 
 ## Database Design Principles
 
-**CRITICAL**: Mundane uses SQLite as its primary data store. ALL database design and modifications MUST follow these principles:
+**CRITICAL**: Cerno uses SQLite as its primary data store. ALL database design and modifications MUST follow these principles:
 
 ### Normalization (Required)
 1. **Eliminate Redundant Data**: Never store derived/computed values (counts, sums, durations) in tables - use SQL aggregation or views instead
@@ -60,11 +60,11 @@ This includes:
 3. **Temporal Tracking**: Add `first_seen` / `last_seen` timestamps to track entity history across scans
 4. **Global Queries**: Design schema to enable "all findings for host X across all scans" type queries
 
-### Schema Changes Strategy
-1. **Breaking Changes**: Schema changes currently require major version bump (e.g., 2.x → 3.0)
-2. **User Impact**: Users must re-import scans after schema changes
-3. **Fresh Start**: Database created directly in final normalized structure
-4. **Future Work**: Migration system will be implemented from clean slate in future release
+### Schema Management
+- Database uses normalized structure created on initialization
+- Schema version tracked in `database.py:SCHEMA_VERSION` (current: 1)
+- Future schema changes will include migration system when needed
+- Always test schema changes with fresh database before release
 
 ### Anti-Patterns to Avoid
 ❌ **Never** store counts/sums in tables when you can compute them with SQL
@@ -88,7 +88,7 @@ Before implementing any schema change, verify:
 
 ## Project Overview
 
-**Mundane** is a Python CLI tool for reviewing Nessus vulnerability scan findings and orchestrating security tools (nmap, NetExec, Metasploit). It features a Rich-based TUI for interactive review, SQLite-backed persistence, and session state tracking.
+**Cerno** is a Python CLI tool for reviewing Nessus vulnerability scan findings and orchestrating security tools (nmap, NetExec, Metasploit). It features a Rich-based TUI for interactive review, SQLite-backed persistence, and session state tracking.
 
 **Core workflow**: Import `.nessus` files → Review findings in TUI → Run security tools → Track progress in database
 
@@ -100,9 +100,9 @@ Before implementing any schema change, verify:
 
 ### Package Structure
 
-Mundane uses setuptools with the following structure:
-- `mundane.py` - Main entry point (top-level module)
-- `mundane_pkg/` - Main package directory
+Cerno uses setuptools with the following structure:
+- `cerno.py` - Main entry point (top-level module)
+- `cerno_pkg/` - Main package directory
   - `migrations/` - Database migration scripts (SUBPACKAGE - must be explicitly included)
   - Other modules...
 
@@ -111,28 +111,28 @@ Mundane uses setuptools with the following structure:
 **Current configuration** (lines 59-64):
 ```toml
 [tool.setuptools]
-packages = ["mundane_pkg", "mundane_pkg.migrations"]
-py-modules = ["mundane"]
+packages = ["cerno_pkg", "cerno_pkg.migrations"]
+py-modules = ["cerno"]
 
 [tool.setuptools.package-data]
-mundane_pkg = ["*.yaml"]
+cerno_pkg = ["*.yaml"]
 ```
 
 ### Adding New Subpackages
 
-When adding a new subdirectory with `__init__.py` under `mundane_pkg/`:
+When adding a new subdirectory with `__init__.py` under `cerno_pkg/`:
 
 1. **Add to packages list**: Update `[tool.setuptools] packages` in pyproject.toml
 2. **Test installation**: Install via `pip install -e .` and verify subpackage is accessible
 3. **Verify in pipx**: If users install via pipx, check that the subpackage appears in site-packages
 
-**Example**: Adding a new `mundane_pkg/plugins/` subpackage:
+**Example**: Adding a new `cerno_pkg/plugins/` subpackage:
 ```toml
 [tool.setuptools]
 packages = [
-    "mundane_pkg",
-    "mundane_pkg.migrations",
-    "mundane_pkg.plugins"  # NEW
+    "cerno_pkg",
+    "cerno_pkg.migrations",
+    "cerno_pkg.plugins"  # NEW
 ]
 ```
 
@@ -142,8 +142,8 @@ For non-Python files (YAML, JSON, etc.) that need to be included:
 
 ```toml
 [tool.setuptools.package-data]
-mundane_pkg = ["*.yaml", "*.json"]  # Files in mundane_pkg/
-"mundane_pkg.migrations" = ["*.sql"]  # Files in mundane_pkg/migrations/
+cerno_pkg = ["*.yaml", "*.json"]  # Files in cerno_pkg/
+"cerno_pkg.migrations" = ["*.sql"]  # Files in cerno_pkg/migrations/
 ```
 
 ### Testing Package Distribution
@@ -155,17 +155,17 @@ mundane_pkg = ["*.yaml", "*.json"]  # Files in mundane_pkg/
 python -m build
 
 # Check package contents
-tar -tzf dist/mundane-*.tar.gz | grep mundane_pkg
+tar -tzf dist/cerno-*.tar.gz | grep cerno_pkg
 
 # Expected output should include:
-# mundane_pkg/
-# mundane_pkg/__init__.py
-# mundane_pkg/migrations/
-# mundane_pkg/migrations/__init__.py
-# mundane_pkg/migrations/migration_001_plugin_output.py
-# mundane_pkg/migrations/migration_002_remove_filesystem_columns.py
-# mundane_pkg/migrations/migration_003_foundation_tables.py
-# mundane_pkg/*.yaml
+# cerno_pkg/
+# cerno_pkg/__init__.py
+# cerno_pkg/migrations/
+# cerno_pkg/migrations/__init__.py
+# cerno_pkg/migrations/migration_001_plugin_output.py
+# cerno_pkg/migrations/migration_002_remove_filesystem_columns.py
+# cerno_pkg/migrations/migration_003_foundation_tables.py
+# cerno_pkg/*.yaml
 ```
 
 **Test installation in isolated environment**:
@@ -173,10 +173,10 @@ tar -tzf dist/mundane-*.tar.gz | grep mundane_pkg
 # Install in clean venv
 python -m venv test_env
 source test_env/bin/activate  # or test_env\Scripts\activate on Windows
-pip install dist/mundane-*.whl
+pip install dist/cerno-*.whl
 
 # Verify subpackage exists
-python -c "from mundane_pkg.migrations import get_all_migrations; print(get_all_migrations())"
+python -c "from cerno_pkg.migrations import get_all_migrations; print(get_all_migrations())"
 # Should print list of migrations, not ModuleNotFoundError
 ```
 
@@ -184,12 +184,12 @@ python -c "from mundane_pkg.migrations import get_all_migrations; print(get_all_
 
 ❌ **DON'T**: Assume setuptools auto-discovers subpackages
 ```toml
-packages = ["mundane_pkg"]  # WRONG: migrations/ won't be included
+packages = ["cerno_pkg"]  # WRONG: migrations/ won't be included
 ```
 
 ✅ **DO**: Explicitly list all subpackages
 ```toml
-packages = ["mundane_pkg", "mundane_pkg.migrations"]  # CORRECT
+packages = ["cerno_pkg", "cerno_pkg.migrations"]  # CORRECT
 ```
 
 ❌ **DON'T**: Forget to test pipx installations
@@ -201,7 +201,7 @@ pip install -e .  # Works because source is available
 ✅ **DO**: Test actual wheel installation
 ```bash
 python -m build
-pipx install dist/mundane-*.whl  # Test real installation
+pipx install dist/cerno-*.whl  # Test real installation
 ```
 
 ### Verification Checklist
@@ -231,16 +231,16 @@ pip install -r requirements.txt
 
 ```bash
 # Direct execution (development)
-python mundane.py --help
+python cerno.py --help
 
 # Installed command (after pip install)
-mundane --help
+cerno --help
 
 # Common commands
-mundane import nessus scan.nessus   # Import Nessus scan
-mundane review                      # Start interactive review
-mundane scan list                   # List all scans
-mundane scan delete <scan_name>     # Delete scan from database
+cerno import nessus scan.nessus   # Import Nessus scan
+cerno review                      # Start interactive review
+cerno scan list                   # List all scans
+cerno scan delete <scan_name>     # Delete scan from database
 ```
 
 ### Testing
@@ -250,7 +250,7 @@ mundane scan delete <scan_name>     # Delete scan from database
 pytest
 
 # Run with verbose coverage report
-pytest --cov=mundane_pkg --cov-report=term-missing --cov-report=html
+pytest --cov=cerno_pkg --cov-report=term-missing --cov-report=html
 
 # Run specific test file
 pytest tests/test_parsing.py
@@ -273,22 +273,21 @@ pytest --durations=10
 
 ```bash
 # Format code with black
-black mundane.py mundane_pkg/ tests/
+black cerno.py cerno_pkg/ tests/
 
 # Type checking with mypy
-mypy mundane_pkg/
+mypy cerno_pkg/
 ```
 
 ## Architecture
 
-### Database-Only Design (v2.0.0+)
+### Database Architecture
 
-Mundane uses a **fully normalized database architecture** with SQLite as the source of truth:
+Cerno uses a **fully normalized database architecture** with SQLite as the source of truth:
 
-- **Location**: `~/.mundane/mundane.db` (global, cross-scan)
+- **Location**: `~/.cerno/cerno.db` (global, cross-scan)
 - **Schema version**: Tracked in `database.py:SCHEMA_VERSION` (current: 1)
-- **Schema approach**: Single-version, normalized structure created on initialization
-- **No migration system**: Breaking changes require major version bump and re-import
+- **Schema approach**: Normalized structure created on initialization
 - `.txt` files are **reference only** - all data lives in database
 
 **Key design principles**:
@@ -296,16 +295,16 @@ Mundane uses a **fully normalized database architecture** with SQLite as the sou
 - File browsing queries database directly (no filesystem walks during review)
 - Review state tracked in `findings.review_state` column, synchronized to filename prefixes
 - CVEs cached in `plugins.cves` JSON column after fetching from Tenable
-- **NEW in v2.x**: Normalized host/port tables enable cross-scan tracking
-- **NEW in v2.x**: SQL views compute statistics on-demand (no redundant cached data)
+- Normalized host/port tables enable cross-scan tracking
+- SQL views compute statistics on-demand (no redundant cached data)
 
 ### Module Structure
 
 ```
-mundane.py                  # Main entry point (Typer CLI commands, 1,679 lines)
+cerno.py                  # Main entry point (Typer CLI commands, 1,679 lines)
                             # CLI layer: review/import/scan/config commands
                             # Navigation: browse_file_list, browse_workflow_groups, show_session_statistics
-mundane_pkg/
+cerno_pkg/
   ├── database.py          # SQLite connection, schema, transactions
   ├── models.py            # ORM models (Scan, Plugin, Finding, Session, ToolExecution, Artifact)
   ├── nessus_import.py     # .nessus XML parsing and database import
@@ -335,12 +334,11 @@ mundane_pkg/
   └── _version.py          # Version resolution (importlib.metadata → pyproject.toml)
 ```
 
-**Refactoring summary** (v2.4.0+):
-- `mundane.py` reduced from 3,699 to 1,679 lines (54.6% reduction)
-- Extended 5 existing modules: `tool_context.py`, `tools.py`, `render.py`, `fs.py`, `session.py`
-- Created 2 new modules: `tui.py` (interactive navigation), `enums.py` (type-safe choices)
-- Introduced `ReviewContext` dataclass to eliminate massive parameter lists (8-11 params → 1 context object)
+**Module organization**:
+- Modular design with clear separation of concerns
+- Context dataclasses eliminate massive parameter lists (`ReviewContext`: 14 fields)
 - Clear separation: `tui.py` handles navigation, `fs.py` handles file operations, `render.py` handles display
+- Database objects (`Plugin`, `Finding`) flow through entire call chain
 
 ### Core Data Flow
 
@@ -349,7 +347,7 @@ mundane_pkg/
 3. **Tools**: TUI menu → Pass `Plugin`/`Finding` objects → `tools.py` → Execute command → `tool_executions` + `artifacts` tables
 4. **Session**: Auto-save to `sessions` table (start time, duration, statistics)
 
-**Key principle (v2.4.6+)**: Plugin and Finding database objects flow through entire call chain. No filename parsing for plugin_id extraction - synthetic paths used only for display/directory structure.
+**Key principle**: Plugin and Finding database objects flow through entire call chain. No filename parsing for plugin_id extraction - synthetic paths used only for display/directory structure.
 
 ### Parsing Architecture
 
@@ -368,9 +366,9 @@ mundane_pkg/
 - Decouples tool definitions from execution logic
 - Enables adding new tools without modifying core code
 
-### Database Schema (v2.x Normalized)
+### Database Schema
 
-**Foundation Tables** (NEW in v2.x):
+**Foundation Tables**:
 - `severity_levels`: Normalized severity reference data (0-4, labels, colors)
 - `artifact_types`: Artifact type definitions
 - `hosts`: Normalized host data across ALL scans (enables cross-scan tracking)
@@ -380,33 +378,33 @@ mundane_pkg/
 **Core Tables**:
 - `scans`: Top-level scan metadata (scan_name, export_root, .nessus hash)
 - `plugins`: Plugin metadata (plugin_id, severity_int, CVSS, CVEs, Metasploit modules)
-  - **REMOVED in v2.x**: `severity_label` column (now in `severity_levels` table)
+  - Note: `severity_label` accessed via `severity_levels` table JOIN
 - `findings`: Findings per scan (scan_id + plugin_id, review_state)
-  - **REMOVED in v2.x**: `host_count`, `port_count` (computed via `v_finding_stats` view)
+  - Note: `host_count`, `port_count` computed via `v_finding_stats` view
 - `finding_affected_hosts`: Host:port combinations (finding_id, host_id FK, port_number FK, plugin_output)
-  - **CHANGED in v2.x**: `host`/`port` columns → foreign keys to normalized tables
+  - Uses foreign keys to normalized `hosts` and `ports` tables
 - `sessions`: Review session tracking (start time, end time)
-  - **REMOVED in v2.x**: cached statistics (computed via `v_session_stats` view)
+  - Note: Statistics computed via `v_session_stats` view
 - `tool_executions`: Command history (tool_name, command_text, exit_code, duration, sudo usage)
 - `artifacts`: Generated files (artifact_path, artifact_type_id FK, file_hash, file_size, metadata JSON)
-  - **CHANGED in v2.x**: `artifact_type` TEXT → `artifact_type_id` INTEGER FK
+  - Uses `artifact_type_id` foreign key to `artifact_types` table
 - `workflow_executions`: Custom workflow tracking
 
 **SQL Views** (Computed Statistics):
-- `v_finding_stats`: Host/port counts per finding (replaces cached columns)
-- `v_session_stats`: Session duration and statistics (replaces cached columns)
-- `v_plugins_with_severity`: Plugins with severity labels (replaces `severity_label` column)
-- `v_host_findings`: Cross-scan host analysis (NEW capability in v2.x)
-- `v_artifacts_with_types`: Artifacts with type names (replaces `artifact_type` column)
+- `v_finding_stats`: Host/port counts per finding
+- `v_session_stats`: Session duration and statistics
+- `v_plugins_with_severity`: Plugins with severity labels
+- `v_host_findings`: Cross-scan host analysis
+- `v_artifacts_with_types`: Artifacts with type names
 
-**Schema changes**: Update `database.py:SCHEMA_SQL_TABLES` and `SCHEMA_SQL_VIEWS`. Breaking changes require major version bump and user re-import.
+**Schema changes**: Update `database.py:SCHEMA_SQL_TABLES` and `SCHEMA_SQL_VIEWS`. Test with fresh database before release.
 
 ### Version Management
 
 Version is defined in `pyproject.toml:project.version` (single source of truth).
 
 `_version.py` resolves version with fallback chain:
-1. `importlib.metadata.version("mundane")` (installed package)
+1. `importlib.metadata.version("cerno")` (installed package)
 2. Parse `pyproject.toml` (development mode)
 3. "unknown" (fallback)
 
@@ -414,17 +412,17 @@ Version is defined in `pyproject.toml:project.version` (single source of truth).
 
 ### Constants & Configuration
 
-**Configuration** (`~/.mundane/config.yaml`): All user preferences managed via config file. Auto-created with defaults on first run. All configuration values are set through this file only.
+**Configuration** (`~/.cerno/config.yaml`): All user preferences managed via config file. Auto-created with defaults on first run. All configuration values are set through this file only.
 
 **CLI commands**:
-- `mundane config show` - Display all configuration settings with current values
-- `mundane config set <key> <value>` - Change a configuration value
-- `mundane config get <key>` - Get current value of a setting
-- `mundane config reset` - Reset configuration to defaults (creates backup)
+- `cerno config show` - Display all configuration settings with current values
+- `cerno config set <key> <value>` - Change a configuration value
+- `cerno config get <key>` - Get current value of a setting
+- `cerno config reset` - Reset configuration to defaults (creates backup)
 
-**Note**: As of v2.3.0, environment variables are no longer checked for configuration. Use `config.yaml` for all settings including:
-- `results_root` - Artifact storage path (default: `~/.mundane/artifacts`)
-- `log_path` - Log file location (default: `~/.mundane/mundane.log`)
+**Note**: Environment variables are not used for configuration. Use `config.yaml` for all settings including:
+- `results_root` - Artifact storage path (default: `~/.cerno/artifacts`)
+- `log_path` - Log file location (default: `~/.cerno/cerno.log`)
 - `debug_logging` - Enable DEBUG level logging (default: `false`)
 - `no_color` - Disable ANSI color output (default: `false`)
 - `default_tool` - Pre-select tool in menu (e.g., `nmap`, `netexec`)
@@ -487,7 +485,7 @@ Version is defined in `pyproject.toml:project.version` (single source of truth).
 
 ### Session Persistence
 
-**Auto-save**: Review progress saved to `sessions` table (no `.mundane_session.json` files in DB-only mode).
+**Auto-save**: Review progress saved to `sessions` table (no `.cerno_session.json` files in DB-only mode).
 
 **Resume prompt**: On startup, shows session details (reviewed/completed/skipped counts, session start time).
 
@@ -534,10 +532,10 @@ def test_split_host_port(input_str, expected_host, expected_port):
 
 ### Adding a New Command
 
-1. Add Typer command in `mundane.py` (use `@app.command()` decorator)
-2. Import required functions from `mundane_pkg`
+1. Add Typer command in `cerno.py` (use `@app.command()` decorator)
+2. Import required functions from `cerno_pkg`
 3. Add docstring for `--help` output
-4. Test manually: `python mundane.py <command> --help`
+4. Test manually: `python cerno.py <command> --help`
 
 ### Adding a New Database Column
 
@@ -565,17 +563,17 @@ def test_split_host_port(input_str, expected_host, expected_port):
 **Testing the schema**:
 ```bash
 # Delete existing database
-rm ~/.mundane/mundane.db
+rm ~/.cerno/cerno.db
 
-# Run mundane (creates fresh database)
-mundane scan list
+# Run cerno (creates fresh database)
+cerno scan list
 
 # Verify schema
-sqlite3 ~/.mundane/mundane.db ".schema"
+sqlite3 ~/.cerno/cerno.db ".schema"
 
 # Check foundation tables populated
-sqlite3 ~/.mundane/mundane.db "SELECT COUNT(*) FROM severity_levels;"  # Expected: 5
-sqlite3 ~/.mundane/mundane.db "SELECT COUNT(*) FROM artifact_types;"   # Expected: 5
+sqlite3 ~/.cerno/cerno.db "SELECT COUNT(*) FROM severity_levels;"  # Expected: 5
+sqlite3 ~/.cerno/cerno.db "SELECT COUNT(*) FROM artifact_types;"   # Expected: 5
 ```
 
 ### Adding a New Tool
@@ -584,24 +582,24 @@ sqlite3 ~/.mundane/mundane.db "SELECT COUNT(*) FROM artifact_types;"   # Expecte
 2. Implement builder function: `def build_<tool>_cmd(ctx: dict) -> tuple[Any, dict]`
 3. Add tool-specific constants to `constants.py` if needed
 4. Update `tools.py` to handle tool-specific prompts
-5. Test in TUI: `mundane review` → Run tool → Verify command generation
+5. Test in TUI: `cerno review` → Run tool → Verify command generation
 
 ### Updating Workflow Mappings
 
-1. Edit `mundane_pkg/workflow_mappings.yaml` (or create custom YAML)
+1. Edit `cerno_pkg/workflow_mappings.yaml` (or create custom YAML)
 2. Follow schema: `version`, `workflows` list, each with `plugin_id`, `workflow_name`, `description`, `steps`, `references`
-3. Test in TUI: `mundane review --custom-workflows <path>` → Press `[W]` on matching plugin
+3. Test in TUI: `cerno review --custom-workflows <path>` → Press `[W]` on matching plugin
 
 ### Debugging Database Issues
 
 ```bash
 # Enable DEBUG logging via config
-mundane config set debug_logging true
-mundane review
-tail -f ~/.mundane/mundane.log
+cerno config set debug_logging true
+cerno review
+tail -f ~/.cerno/cerno.log
 
 # Inspect database directly
-sqlite3 ~/.mundane/mundane.db
+sqlite3 ~/.cerno/cerno.db
 sqlite> .schema
 sqlite> SELECT * FROM scans;
 sqlite> SELECT * FROM v_review_progress;

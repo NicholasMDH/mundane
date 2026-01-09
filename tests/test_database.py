@@ -1,4 +1,4 @@
-"""Tests for mundane_pkg.database module."""
+"""Tests for cerno_pkg.database module."""
 
 import sqlite3
 import tempfile
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mundane_pkg.database import (
+from cerno_pkg.database import (
     get_connection,
     db_transaction,
     initialize_database,
@@ -176,7 +176,7 @@ class TestForeignKeyConstraints:
         )
         scan_id = cursor.lastrowid
 
-        # Insert plugin (severity_label removed in schema v5)
+        # Insert plugin (severity_label fetched from view, not stored)
         temp_db.execute(
             "INSERT INTO plugins (plugin_id, plugin_name, severity_int) VALUES (?, ?, ?)",
             (12345, "Test Plugin", 2)
