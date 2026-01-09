@@ -345,9 +345,11 @@ mundane_pkg/
 ### Core Data Flow
 
 1. **Import**: `.nessus` XML → `nessus_import.py` → SQLite (`scans`, `plugins`, `findings`, `finding_affected_hosts`)
-2. **Review**: Database query → `render.py` tables → User actions → Update `review_state` column
-3. **Tools**: TUI menu → `tools.py` → Execute command → `tool_executions` + `artifacts` tables
+2. **Review**: `Finding.get_by_scan_with_plugin()` → `(Finding, Plugin)` tuples → `render.py` tables → User actions → Update `review_state` column
+3. **Tools**: TUI menu → Pass `Plugin`/`Finding` objects → `tools.py` → Execute command → `tool_executions` + `artifacts` tables
 4. **Session**: Auto-save to `sessions` table (start time, duration, statistics)
+
+**Key principle (v2.4.6+)**: Plugin and Finding database objects flow through entire call chain. No filename parsing for plugin_id extraction - synthetic paths used only for display/directory structure.
 
 ### Parsing Architecture
 

@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .config import MundaneConfig
+    from .models import Plugin, Finding
 
 import pyperclip
 from rich.console import Console
@@ -32,6 +33,7 @@ from .constants import (
     SEARCH_WINDOW_SIZE,
     MIN_TERM_LENGTH,
 )
+from .tool_context import ToolContext, CommandResult
 
 # Optional dependencies for Metasploit search
 try:
@@ -297,7 +299,8 @@ def choose_tool(config: Optional["MundaneConfig"] = None) -> Optional[str]:
 
     while True:
         try:
-            answer = Prompt.ask("Choose", default="" if default_tool else None).strip().lower()
+            answer = Prompt.ask("Choose", default="" if default_tool else None)
+            answer = (answer or "").strip().lower()
         except KeyboardInterrupt:
             warn("\nInterrupted — returning to file menu.")
             return None
@@ -675,7 +678,7 @@ def _build_netexec_workflow(ctx: "ToolContext") -> Optional["CommandResult"]:
         command=cmd,
         display_command=cmd,
         artifact_note=f"NetExec log:   {nxc_log}",
-        relay_path=relay_path,
+        relay_path=Path(relay_path) if relay_path else None,
     )
 
 
@@ -725,7 +728,8 @@ def _build_custom_workflow(ctx: "ToolContext") -> Optional["CommandResult"]:
 
 
 def run_tool_workflow(
-    chosen: Path,
+    plugin: "Plugin",
+    finding: "Finding",
     scan_dir: Path,
     sev_dir: Path,
     hosts: list[str],
@@ -736,11 +740,13 @@ def run_tool_workflow(
     """
     Execute tool selection and execution workflow.
 
-    NOTE: This function will be refactored to use ReviewContext in Phase 6.
-    For now, it maintains the old signature for compatibility.
+    NOTE: This function now accepts Plugin/Finding objects directly instead
+    of extracting plugin_id from filenames. This eliminates redundant parsing
+    and aligns with the database-first architecture.
 
     Args:
-        chosen: Selected plugin file
+        plugin: Plugin database object with metadata
+        finding: Finding database object
         scan_dir: Scan directory
         sev_dir: Severity directory
         hosts: List of target hosts
@@ -760,7 +766,6 @@ def run_tool_workflow(
     from .constants import SAMPLE_THRESHOLD, get_results_root
     from .fs import build_results_paths, pretty_severity_label, write_work_files
     from .ops import require_cmd, run_command_with_progress, log_tool_execution, log_artifacts_for_nmap
-    from .parsing import extract_plugin_id_from_filename
     from .tool_registry import get_tool
     from .tool_context import ToolContext
 
@@ -809,24 +814,27 @@ def run_tool_workflow(
             workdir, sample_hosts, ports_str, udp=True
         )
 
+    # Create synthetic filename for output directory structure
+    # Format: {plugin_id}_{plugin_name}
+    synthetic_filename = f"{plugin.plugin_id}_{plugin.plugin_name.replace(' ', '_').replace('/', '_')}"
+
     out_dir_static = (
         get_results_root()
         / scan_dir.name
         / pretty_severity_label(sev_dir.name)
-        / Path(chosen.name).stem
+        / synthetic_filename
     )
     out_dir_static.mkdir(parents=True, exist_ok=True)
 
     tool_used = False
 
-    # Get plugin details for Metasploit
-    # Import _plugin_details_line temporarily from mundane.py context
-    # This will be refactored in Phase 5
-    plugin_id = extract_plugin_id_from_filename(chosen)
-    plugin_url = None
-    if plugin_id:
-        from .constants import PLUGIN_DETAILS_BASE
-        plugin_url = f"{PLUGIN_DETAILS_BASE}{plugin_id}"
+    # Get plugin details directly from Plugin object
+    from .constants import PLUGIN_DETAILS_BASE
+    plugin_url = f"{PLUGIN_DETAILS_BASE}{plugin.plugin_id}"
+    plugin_id = str(plugin.plugin_id)
+
+    # Create synthetic path for ToolContext and logging (matches original chosen parameter)
+    synthetic_path = Path(f"{synthetic_filename}.txt")
 
     while True:
         from .config import load_config
@@ -842,7 +850,7 @@ def run_tool_workflow(
             warn(f"Unknown tool selection: {tool_choice}")
             continue
 
-        _tmp_dir, oabase = build_results_paths(scan_dir, sev_dir, chosen.name)
+        _tmp_dir, oabase = build_results_paths(scan_dir, sev_dir, f"{synthetic_filename}.txt")
         results_dir = out_dir_static
 
         # ====================================================================
@@ -951,7 +959,7 @@ def run_tool_workflow(
             scan_dir=scan_dir,
             sev_dir=sev_dir,
             plugin_url=plugin_url,
-            chosen_file=chosen,
+            chosen_file=synthetic_path,
         )
 
         # Call workflow with unified context (same signature for all tools!)
@@ -1014,7 +1022,7 @@ def run_tool_workflow(
                     tool_protocol=getattr(selected_tool, 'protocol', None),
                     host_count=host_count,
                     ports=ports_str if ports_str else None,
-                    file_path=chosen,
+                    file_path=synthetic_path,
                     scan_dir=scan_dir
                 )
 

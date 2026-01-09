@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 _console_global = get_console()
 
-# Action result type for handle_file_list_actions
+# Action result type for handle_finding_list_actions
 ActionResult = Tuple[
     Optional[str],  # action_type: None, "back", "file_selected", "help", "mark_all"
     str,  # file_filter
@@ -163,7 +163,7 @@ def choose_from_list(
 # ===================================================================
 
 
-def handle_file_list_actions(
+def handle_finding_list_actions(
     ans: str,
     candidates: List[Any],  # List of (Finding, Plugin) tuples
     page_items: List[Any],  # List of (Finding, Plugin) tuples
@@ -422,7 +422,7 @@ def handle_file_list_actions(
 
         # Extract plugin info from (Finding, Plugin) tuples for CVE extraction
         # Pass list of (plugin_id, plugin_name) tuples instead of file paths
-        from .nessus_import import bulk_extract_cves_for_plugins
+        from .render import bulk_extract_cves_for_plugins
         plugin_info_list = [(p.plugin_id, p.plugin_name) for pf, p in candidates]
         bulk_extract_cves_for_plugins(plugin_info_list)
         return None, file_filter, reviewed_filter, group_filter, sort_mode, page_idx

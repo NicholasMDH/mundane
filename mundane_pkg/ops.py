@@ -141,20 +141,25 @@ def run_command_with_progress(
 
     try:
         from .ansi import style_if_enabled
-        with Progress(
-            SpinnerColumn(style=style_if_enabled("cyan")),
-            TextColumn("[progress.description]{task.description}"),
-            TimeElapsedColumn(),
-            console=_console_global,
-            transient=True,
-        ) as progress:
-            progress.add_task(f"Running: {display_cmd}", start=True)
-            for line in iter(proc.stdout.readline, ""):
-                print(line, end="")
-                progress.refresh()
-            proc.stdout.close()
+        if proc.stdout is None:
+            # This should never happen since we set stdout=PIPE, but satisfy type checker
             proc.wait()
             return_code = proc.returncode
+        else:
+            with Progress(
+                SpinnerColumn(style=style_if_enabled("cyan")),
+                TextColumn("[progress.description]{task.description}"),
+                TimeElapsedColumn(),
+                console=_console_global,
+                transient=True,
+            ) as progress:
+                progress.add_task(f"Running: {display_cmd}", start=True)
+                for line in iter(proc.stdout.readline, ""):
+                    print(line, end="")
+                    progress.refresh()
+                proc.stdout.close()
+                proc.wait()
+                return_code = proc.returncode
     except KeyboardInterrupt:
         try:
             proc.terminate()

@@ -8,7 +8,7 @@ and generate scan statistics.
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Union, TYPE_CHECKING
+from typing import Optional, Union, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from .models import Plugin, Finding
@@ -60,12 +60,14 @@ def compare_filtered(files: Union[list['Finding'], list[tuple['Finding', 'Plugin
     # Detect what type of input we have (database-only)
     from .models import Finding, Plugin
     if files and isinstance(files[0], tuple) and len(files[0]) == 2:
-        # (Finding, Plugin) tuples - extract Findings
-        findings = [pf for pf, _ in files]
-        plugins_map = {pf.plugin_id: plugin for pf, plugin in files}
+        # (Finding, Plugin) tuples - extract Findings with explicit cast for type narrowing
+        tuple_files = cast(list[tuple[Finding, Plugin]], files)
+        findings: list[Finding] = [pf for pf, _ in tuple_files]
+        plugins_map = {pf.plugin_id: plugin for pf, plugin in tuple_files}
     else:
         # Just Finding objects (need to query plugins separately for display)
-        findings = files
+        finding_files = cast(list[Finding], files)
+        findings = finding_files
         plugins_map = {}  # Will be populated if needed
 
     parsed = []
@@ -103,7 +105,7 @@ def compare_filtered(files: Union[list['Finding'], list[tuple['Finding', 'Plugin
                              ELSE 2 END,
                         h.host_address ASC
                 """.format(','.join('?' * len(finding_ids))),
-                finding_ids
+                tuple(finding_ids)
             )
 
         # Group results by finding_id
@@ -243,12 +245,14 @@ def analyze_inclusions(files: Union[list['Finding'], list[tuple['Finding', 'Plug
     # Detect what type of input we have (database-only)
     from .models import Finding, Plugin
     if files and isinstance(files[0], tuple) and len(files[0]) == 2:
-        # (Finding, Plugin) tuples - extract Findings
-        findings = [pf for pf, _ in files]
-        plugins_map = {pf.plugin_id: plugin for pf, plugin in files}
+        # (Finding, Plugin) tuples - extract Findings with explicit cast for type narrowing
+        tuple_files = cast(list[tuple[Finding, Plugin]], files)
+        findings: list[Finding] = [pf for pf, _ in tuple_files]
+        plugins_map = {pf.plugin_id: plugin for pf, plugin in tuple_files}
     else:
-        # Just Finding objects
-        findings = files
+        # Just Finding objects with explicit cast for type narrowing
+        finding_files = cast(list[Finding], files)
+        findings = finding_files
         plugins_map = {}
 
     parsed = []
@@ -285,7 +289,7 @@ def analyze_inclusions(files: Union[list['Finding'], list[tuple['Finding', 'Plug
                              ELSE 2 END,
                         h.host_address ASC
                     """.format(','.join('?' * len(finding_ids))),
-                finding_ids
+                tuple(finding_ids)
             )
 
         # Group results by finding_id
