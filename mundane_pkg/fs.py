@@ -368,7 +368,7 @@ def handle_finding_view(
             if not plugin:
                 warn("Plugin information not available.")
                 continue
-            if not has_workflow:
+            if not has_workflow or workflow_mapper is None:
                 warn("No workflow available for this finding.")
                 continue
 
@@ -400,7 +400,7 @@ def handle_finding_view(
         # Handle Finding Info action
         if action_choice in ("i", "info"):
             # Redisplay the preview panel
-            if plugin is None or sev_dir is None:
+            if plugin is None or sev_dir is None or finding is None:
                 warn("Plugin metadata not available - cannot display finding info")
                 continue
             _display_finding_preview(plugin, finding, sev_dir, chosen)
@@ -408,7 +408,7 @@ def handle_finding_view(
 
         # Handle Finding Details action
         if action_choice in ("d", "details"):
-            if finding is None:
+            if finding is None or plugin is None:
                 warn("Database not available - cannot display finding details")
                 continue
 
@@ -503,7 +503,7 @@ def process_single_finding(
     plugin: "Plugin",
     finding: "Finding",
     scan_dir: Path,
-    sev_dir: Path,
+    sev_dir: Optional[Path],
     args: types.SimpleNamespace,
     use_sudo: bool,
     skipped_total: List[str],

@@ -108,10 +108,12 @@ def cvss_to_sev(cvss_score: Optional[str]) -> int:
     Returns:
         Severity integer (0-4), defaults to 0 if score is missing or invalid
     """
+    if cvss_score is None:
+        return 0  # Default to Info if score missing
     try:
         s = float(cvss_score)
     except (TypeError, ValueError):
-        return 0  # Default to Info if score missing or unparsable
+        return 0  # Default to Info if score unparsable
 
     if s == 0.0:
         return 0
@@ -209,7 +211,7 @@ def truthy(text: Optional[str]) -> bool:
 def _build_index_stream(
     filename: Path,
     include_ports: bool = True
-) -> Tuple[Dict[str, dict], Dict[str, Set[str]]]:
+) -> Tuple[Dict[str, dict], Dict[str, Set[Tuple[str, str]]]]:
     """Parse .nessus XML file and build plugin index with streaming.
 
     Memory-efficient single-pass parsing using iterparse with element clearing.
@@ -228,7 +230,7 @@ def _build_index_stream(
         FileNotFoundError: If .nessus file doesn't exist
     """
     plugins: Dict[str, dict] = {}
-    plugin_hosts: Dict[str, Set[str]] = defaultdict(set)
+    plugin_hosts: Dict[str, Set[tuple[str, str]]] = defaultdict(set)
     current_host = ""
 
     try:
@@ -320,7 +322,7 @@ def _build_index_stream(
                 # Record host:port combination with plugin_output
                 port = elem.attrib.get("port", "0")
                 entry = current_host if (not include_ports or port == "0") else f"{current_host}:{port}"
-                plugin_hosts[pid].add((entry, plugin_output))
+                plugin_hosts[pid].add((entry, plugin_output or ""))
 
                 elem.clear()  # Free memory immediately
 
@@ -447,7 +449,7 @@ def _write_to_database(
     scan_name: str,
     base_scan_dir: Path,
     plugins: Dict[str, dict],
-    plugin_hosts: Dict[str, Set[str]]
+    plugin_hosts: Dict[str, Set[Tuple[str, str]]]
 ) -> None:
     """Write scan, plugin, and host data to database.
 
@@ -492,6 +494,9 @@ def _write_to_database(
                 log_info(f"Creating new scan: {scan_name}")
 
             scan_id = scan.save(conn)
+            if scan_id is None:
+                log_error("Failed to save scan - scan_id is None")
+                return
 
             # ========== Step 1: Collect unique hosts and ports from ALL plugins ==========
             unique_hosts = {}  # host_address -> host_type

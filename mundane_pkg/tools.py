@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .config import MundaneConfig
+    from .models import Plugin, Finding
 
 import pyperclip
 from rich.console import Console
@@ -32,6 +33,7 @@ from .constants import (
     SEARCH_WINDOW_SIZE,
     MIN_TERM_LENGTH,
 )
+from .tool_context import ToolContext, CommandResult
 
 # Optional dependencies for Metasploit search
 try:
@@ -297,7 +299,8 @@ def choose_tool(config: Optional["MundaneConfig"] = None) -> Optional[str]:
 
     while True:
         try:
-            answer = Prompt.ask("Choose", default="" if default_tool else None).strip().lower()
+            answer = Prompt.ask("Choose", default="" if default_tool else None)
+            answer = (answer or "").strip().lower()
         except KeyboardInterrupt:
             warn("\nInterrupted — returning to file menu.")
             return None
@@ -675,7 +678,7 @@ def _build_netexec_workflow(ctx: "ToolContext") -> Optional["CommandResult"]:
         command=cmd,
         display_command=cmd,
         artifact_note=f"NetExec log:   {nxc_log}",
-        relay_path=relay_path,
+        relay_path=Path(relay_path) if relay_path else None,
     )
 
 

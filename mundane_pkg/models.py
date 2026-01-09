@@ -62,14 +62,14 @@ class Scan:
             last_reviewed_at=row["last_reviewed_at"]
         )
 
-    def save(self, conn: Optional[sqlite3.Connection] = None) -> int:
+    def save(self, conn: Optional[sqlite3.Connection] = None) -> Optional[int]:
         """Insert or update scan in database.
 
         Args:
             conn: Database connection (creates new if None)
 
         Returns:
-            scan_id of saved record
+            scan_id of saved record (or None if not set)
         """
         with db_transaction(conn) as c:
             if self.scan_id is None:
@@ -269,14 +269,14 @@ class Plugin:
             metadata_fetched_at=row["metadata_fetched_at"]
         )
 
-    def save(self, conn: Optional[sqlite3.Connection] = None) -> int:
+    def save(self, conn: Optional[sqlite3.Connection] = None) -> Optional[int]:
         """Insert or update plugin in database (upsert).
 
         Args:
             conn: Database connection
 
         Returns:
-            plugin_id
+            plugin_id (or None if not set)
         """
         metasploit_names_json = json.dumps(self.metasploit_names) if self.metasploit_names else None
         cves_json = json.dumps(self.cves) if self.cves else None
@@ -351,14 +351,14 @@ class Finding:
             review_notes=row["review_notes"]
         )
 
-    def save(self, conn: Optional[sqlite3.Connection] = None) -> int:
+    def save(self, conn: Optional[sqlite3.Connection] = None) -> Optional[int]:
         """Insert or update finding in database.
 
         Args:
             conn: Database connection
 
         Returns:
-            finding_id of saved record
+            finding_id of saved record (or None if not set)
         """
         with db_transaction(conn) as c:
             if self.finding_id is None:
@@ -896,14 +896,14 @@ class ToolExecution:
             used_sudo=bool(row["used_sudo"])
         )
 
-    def save(self, conn: Optional[sqlite3.Connection] = None) -> int:
+    def save(self, conn: Optional[sqlite3.Connection] = None) -> Optional[int]:
         """Insert or update tool execution in database.
 
         Args:
             conn: Database connection
 
         Returns:
-            execution_id of saved record
+            execution_id of saved record (or None if not set)
         """
         cmd_args_json = json.dumps(self.command_args) if self.command_args else None
 
@@ -983,14 +983,14 @@ class Artifact:
             metadata=metadata
         )
 
-    def save(self, conn: Optional[sqlite3.Connection] = None) -> int:
+    def save(self, conn: Optional[sqlite3.Connection] = None) -> Optional[int]:
         """Insert artifact in database.
 
         Args:
             conn: Database connection
 
         Returns:
-            artifact_id of saved record
+            artifact_id of saved record (or None if not set)
         """
         metadata_json = json.dumps(self.metadata) if self.metadata else None
 
@@ -1316,7 +1316,8 @@ class Host:
                 "INSERT INTO hosts (host_address, host_type) VALUES (?, ?)",
                 (host_address, host_type)
             )
-            return cursor.lastrowid
+            # lastrowid should always be set after INSERT, but satisfy type checker
+            return cursor.lastrowid if cursor.lastrowid is not None else 0
 
     @classmethod
     def get_by_address(

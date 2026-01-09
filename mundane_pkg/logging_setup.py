@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 
 
 # ========== Logger backend selection ==========
+# Initialize to prevent "possibly unbound" errors
+_log: Any = None
+_logging: Any = None
+
 try:
     from loguru import logger as _log
 

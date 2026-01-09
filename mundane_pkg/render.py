@@ -131,7 +131,7 @@ def render_severity_table(
     severities: list[Path],
     msf_summary: Optional[tuple[int, int, int, int]] = None,
     workflow_summary: Optional[tuple[int, int, int, int]] = None,
-    scan_id: int = None,
+    scan_id: Optional[int] = None,
 ) -> None:
     """Render a table of severity levels with review progress percentages.
 
@@ -154,6 +154,12 @@ def render_severity_table(
     table.add_column("Unreviewed (%)", justify="right", no_wrap=True, max_width=15)
     table.add_column("Reviewed (%)", justify="right", no_wrap=True, max_width=14)
     table.add_column("Total", justify="right", no_wrap=True, max_width=8)
+
+    if scan_id is None:
+        # scan_id should always be provided in DB-only mode, but handle gracefully
+        from .ansi import warn
+        warn("scan_id not provided - cannot render severity table")
+        return
 
     for i, severity_dir in enumerate(severities, 1):
         unreviewed, reviewed, total = count_severity_findings(severity_dir, scan_id=scan_id)
@@ -851,7 +857,7 @@ def _build_plugin_output_details(
 def _display_finding_preview(
     plugin: "Plugin",
     finding: "Finding",
-    sev_dir: Path,
+    sev_dir: Optional[Path],
     chosen: Path,
 ) -> None:
     """Display finding preview panel with metadata (database-only).
@@ -884,7 +890,7 @@ def _display_finding_preview(
 
     # Severity
     content.append("Severity: ", style=style_if_enabled("cyan"))
-    sev_label = pretty_severity_label(sev_dir.name)
+    sev_label = pretty_severity_label(sev_dir.name) if sev_dir else f"{plugin.severity_int}_{plugin.severity_label or 'Unknown'}"
     content.append(f"{sev_label}\n", style=severity_style(sev_label))
 
     # Plugin Details (URL)

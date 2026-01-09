@@ -155,8 +155,9 @@ rich_tb_install(show_locals=False, suppress=["typer", "click"])
 
 # === Configuration context ===
 import contextvars
+from typing import Optional as Opt
 
-_config_context = contextvars.ContextVar('config', default=None)
+_config_context: contextvars.ContextVar[Opt['MundaneConfig']] = contextvars.ContextVar('config', default=None)
 
 def get_current_config():
     """Get config from context or load fresh."""
@@ -711,6 +712,10 @@ def main(args: types.SimpleNamespace) -> None:
     from datetime import datetime
     session_start_time = datetime.now()
 
+    # Initialize variables for scan selection (used later for session tracking)
+    scan_id: int = 0  # Will be set when user selects a scan
+    scan_dir: Optional[Path] = None  # Will be set when user selects a scan
+
     # Initialize workflow mapper
     custom_workflows = getattr(args, 'custom_workflows', None)
     custom_workflows_only = getattr(args, 'custom_workflows_only', None)
@@ -847,10 +852,16 @@ def main(args: types.SimpleNamespace) -> None:
             # Note: scan_dir is a Path object used for display (scan_dir.name) only
             # In database-only mode, the directory doesn't need to exist
 
+            # Type narrowing: ensure scan_id is not None
+            if selected_scan.scan_id is None:
+                warn("Invalid scan - missing scan_id")
+                continue
+
+            scan_id: int = selected_scan.scan_id
             ok(f"Selected: {selected_scan.scan_name}")
 
             # Check for existing session
-            previous_session = load_session(selected_scan.scan_id)
+            previous_session = load_session(scan_id)
             if previous_session:
                 from datetime import datetime
                 session_date = datetime.fromisoformat(previous_session.session_start)
@@ -871,7 +882,7 @@ def main(args: types.SimpleNamespace) -> None:
                     ok("Session resumed.")
                 else:
                     # Start fresh session - end the old one
-                    delete_session(selected_scan.scan_id)
+                    delete_session(scan_id)
                     ok("Starting fresh session.")
             else:
                 # No previous session - start fresh
@@ -889,7 +900,7 @@ def main(args: types.SimpleNamespace) -> None:
                 warn(f"top_ports_count {top_ports} is very large, capping at 100")
                 top_ports = 100
 
-            show_scan_summary(scan_dir, top_ports_n=top_ports, scan_id=selected_scan.scan_id)
+            show_scan_summary(scan_dir, top_ports_n=top_ports, scan_id=scan_id)
 
             # Severity loop (inner loop)
             while True:
@@ -898,7 +909,7 @@ def main(args: types.SimpleNamespace) -> None:
                 header(bc if bc else f"Scan: {scan_dir.name} — choose severity")
 
                 # Get severity directories from database (database-only mode)
-                severity_dir_names = Finding.get_severity_dirs_for_scan(selected_scan.scan_id)
+                severity_dir_names = Finding.get_severity_dirs_for_scan(scan_id)
                 if not severity_dir_names:
                     warn("No severity directories in this scan.")
                     break
@@ -909,7 +920,7 @@ def main(args: types.SimpleNamespace) -> None:
 
                 # Metasploit Module virtual group (menu counts) - query from database
                 msf_files = Finding.get_by_scan_with_plugin(
-                    scan_id=selected_scan.scan_id,
+                    scan_id=scan_id,
                     has_metasploit=True
                 )
 
@@ -933,7 +944,7 @@ def main(args: types.SimpleNamespace) -> None:
                 if workflow_plugin_ids:
                     workflow_plugin_ids_int = [int(pid) for pid in workflow_plugin_ids if pid.isdigit()]
                     workflow_files = Finding.get_by_scan_with_plugin(
-                        scan_id=selected_scan.scan_id,
+                        scan_id=scan_id,
                         plugin_ids=workflow_plugin_ids_int
                     )
                 else:
@@ -957,7 +968,7 @@ def main(args: types.SimpleNamespace) -> None:
                     else None
                 )
 
-                render_severity_table(severities, msf_summary=msf_summary, workflow_summary=workflow_summary, scan_id=selected_scan.scan_id)
+                render_severity_table(severities, msf_summary=msf_summary, workflow_summary=workflow_summary, scan_id=scan_id)
 
                 print_action_menu([("B", "Back")])
                 info("Tip: Multi-select is supported (e.g., 1-3 or 1,3,5)")
@@ -1084,8 +1095,10 @@ def main(args: types.SimpleNamespace) -> None:
 
     # Save session before showing summary
     if reviewed_total or completed_total or skipped_total:
+        # Type guard: scan_id must be defined if any work was done
+        # (scan_id is defined right after scan selection, before any review work)
         save_session(
-            selected_scan.scan_id,
+            scan_id,
             session_start_time,
             reviewed_count=len(reviewed_total),
             completed_count=len(completed_total),
@@ -1094,19 +1107,22 @@ def main(args: types.SimpleNamespace) -> None:
 
     # Session summary with rich statistics (only if work was done)
     if reviewed_total or completed_total or skipped_total:
-        # Note: scan_dir is defined only if user entered a scan
-        # Since we have reviewed/completed/skipped findings, scan_dir must be defined
-        show_session_statistics(
-            session_start_time,
-            reviewed_total,
-            completed_total,
-            skipped_total,
-            scan_dir,
-            scan_id=selected_scan.scan_id,
-        )
+        # Type guard: scan_dir must be defined if any work was done
+        # (scan_dir is defined right after scan selection, before any review work)
+        if scan_dir is None:
+            warn("Cannot show session statistics - scan directory not selected")
+        else:
+            show_session_statistics(
+                session_start_time,
+                reviewed_total,
+                completed_total,
+                skipped_total,
+                scan_dir,
+                scan_id=scan_id,
+            )
 
         # Clean up session (mark as ended in database)
-        delete_session(selected_scan.scan_id)
+        delete_session(scan_id)
 
     _console_global.print() # Empty line
     ok("Now run \"mundane review\" to start reviewing findings.")
